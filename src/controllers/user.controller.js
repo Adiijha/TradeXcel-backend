@@ -88,11 +88,11 @@ const loginUser = asyncHandler(async (req, res) => {
   const loggedInUser = await User.findById(user._id).select("-password -refreshToken -pin");
 
   const options = {
-    httpOnly: false,  // Prevent access via JavaScript
-    secure: process.env.NODE_ENV === "production",  // Use HTTPS in production
-    sameSite: "lax",  // Cross-origin behavior
-    path: "/",  // Available across all routes
-    expires: new Date(Date.now() + 3600000),
+    httpOnly: true,
+  secure: false,
+  sameSite: "none", // Cross-origin cookies
+  path: "/",
+  expires: new Date(Date.now() + 3600000),
   };
 
   res.status(200)
