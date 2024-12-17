@@ -26,6 +26,10 @@ import userRouter from './routes/user.routes.js';
 //routes declaration
 app.use("/api/v1/users",userRouter)
 
+import financeRouter from './routes/finance.routes.js';
+
+app.use('/api/v1/finance', financeRouter);
+
 
 
 export { app }
