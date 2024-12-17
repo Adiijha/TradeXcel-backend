@@ -19,8 +19,6 @@ const getStockData = asyncHandler(async (req, res, next) => {
   
       const data = await response.json();
   
-      // Log the entire data response to check its structure
-      console.log('Yahoo API Response:', JSON.stringify(data, null, 2));
   
       if (!data?.chart?.result || data.chart.result.length === 0) {
         console.error('No valid stock data received:', data);
@@ -29,15 +27,10 @@ const getStockData = asyncHandler(async (req, res, next) => {
   
       // Extract the stock data from the response
       const stockData = data.chart.result[0];
-  
-      // Log important parts of the response for debugging
-      console.log('Stock Data:', stockData);
-  
+    
       const timestamps = stockData.timestamp || [];
       const adjClosePrices = stockData.indicators?.adjclose[0]?.adjclose || []; // Corrected this line
   
-      console.log('Timestamps:', timestamps);
-      console.log('Adjusted Close Prices:', adjClosePrices);
   
       // Check if timestamps or adjusted close prices are missing
       if (!timestamps.length || !adjClosePrices.length) {
