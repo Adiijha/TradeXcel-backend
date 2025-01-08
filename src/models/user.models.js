@@ -13,6 +13,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  avatar: {
+        type : String, //cloudinary url
+        required : true,
+  },
   email: {
     type: String,
     required: true,

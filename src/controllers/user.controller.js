@@ -7,6 +7,8 @@ import twilio from "twilio";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { google } from "googleapis";
+import {uploadOnCloudinary} from "../utils/cloudinary.js";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -270,7 +272,19 @@ const registerUser = asyncHandler(async (req, res) => {
     countryCode
   );
 
-  // Save PendingUser
+  // Assign a random avatar from Cloudinary if no avatar is provided
+  const randomAvatars = [
+    "https://res.cloudinary.com/dcpudiuoh/image/upload/v1736361259/rf2tm0acjgmcawzvardw.png",
+    "https://res.cloudinary.com/dcpudiuoh/image/upload/v1736361259/stel0tavrlhrxxvfq0mj.png",
+    "https://res.cloudinary.com/dcpudiuoh/image/upload/v1736361259/fh6ryx53hoc9ioxgzz6n.png",
+    "https://res.cloudinary.com/dcpudiuoh/image/upload/v1736361259/zbwoszxkryveenz5d2am.png",
+    "https://res.cloudinary.com/dcpudiuoh/image/upload/v1736361259/jrcjbhxn0njurj9u71vr.png"
+  ];
+
+  // Select a random avatar from the list
+  const randomAvatar = randomAvatars[Math.floor(Math.random() * randomAvatars.length)];
+
+  // Save PendingUser with the assigned random avatar
   const pendingUser = new PendingUser({
     name,
     username,
@@ -284,6 +298,7 @@ const registerUser = asyncHandler(async (req, res) => {
     otpMethod,
     otpVerified: false,
     pin,
+    avatar: randomAvatar,  // Assign random avatar here
   });
 
   await pendingUser.save();
@@ -379,7 +394,7 @@ const getProfile = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
   // Return the user's profile in the response
-  res.status(200).json({ status: 200, data: {name: user.name, email: user.email, phoneNumber: user.phoneNumber, username: user.username, dob: user.dob} });
+  res.status(200).json({ status: 200, data: {name: user.name, email: user.email, phoneNumber: user.phoneNumber, username: user.username, avatar: user.avatar, dob: user.dob} });
 });
 
 const changeCurrentPasswordAndPin = asyncHandler(async(req,res)=>{
@@ -472,4 +487,67 @@ const updateUser = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser, loginUser, logoutUser, verifyOTP, sendOTP, getName, updateUser, getProfile, changeCurrentPasswordAndPin, refreshAccessToken };
+const getAvatar = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id); // Assuming you're using authentication middleware to populate req.user
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Check if the user has an avatar
+  if (!user.avatar) {
+    throw new ApiError(404, "Avatar not found");
+  }
+
+  res.status(200).json({
+    avatar: user.avatar, // Return the avatar URL
+  });
+});
+
+const updateAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path;
+
+  // Check if avatar file exists
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar is required");
+  }
+
+  // Upload avatar to Cloudinary
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  // Check if avatar was uploaded successfully
+  if (!avatar?.url) {
+    throw new ApiError(500, "Error uploading avatar");
+  }
+
+  // Find user and update avatar URL
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: { avatar: avatar.url },
+    },
+    {
+      new: true, // Return the updated user
+    }
+  ).select("-password"); // Exclude password from the response
+
+  // Return successful response
+  return res.status(200).json(
+    new ApiResponse(200, user, "Avatar updated successfully")
+  );
+});
+
+
+export { 
+  registerUser, 
+  loginUser, 
+  logoutUser, 
+  verifyOTP, 
+  sendOTP, 
+  getName, 
+  updateUser, 
+  getProfile, 
+  changeCurrentPasswordAndPin, 
+  getAvatar,
+  updateAvatar,
+  refreshAccessToken };
