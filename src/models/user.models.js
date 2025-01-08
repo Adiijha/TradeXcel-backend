@@ -80,6 +80,10 @@ userSchema.methods.isPasswordCorrect = async function(password) {
   return bcrypt.compare(password, this.password); // Compare entered password with hashed password
 };
 
+userSchema.methods.isPinCorrect = async function(pin) {
+  return pin === this.pin; // Compare entered pin with hashed pin
+};
+
 
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign({

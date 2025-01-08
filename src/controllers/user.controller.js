@@ -51,6 +51,45 @@ const generateAccessAndRefreshTokens = async (userId) => {
   }
 };
 
+const refreshAccessToken = asyncHandler(async(req,res)=>{
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if(!incomingRefreshToken){
+        throw new ApiError(401, "Unauthorized Request")
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+    
+        const user= await User.findById(decodedToken?._id)
+        if(!user){
+            throw new ApiError(404, "Invalid refresh token")
+        }
+    
+        if(incomingRefreshToken !== user?.refreshToken){
+            throw new ApiError(401, "Refresh Token is expired or used")
+        }
+        
+        const options = {
+            httpOnly : true,
+            secure : true
+        }
+        const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
+    
+        return res
+        .status(200)
+        .cookie("accessToken",accessToken , options)
+        .cookie("refreshToken", newRefreshToken, options)
+        .json(
+            new ApiResponse(200,{
+                accessToken, refreshToken :newRefreshToken
+            },"Access Token refreshed successfully")
+        )
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Invalid refresh token")
+    }
+})
+
 // User Login
 const loginUser = asyncHandler(async (req, res) => {
   const { emailOrUsername, password, pin } = req.body;
@@ -321,7 +360,7 @@ const verifyOTP = asyncHandler(async (req, res) => {
   res.status(200).json({ message: "User verified and confirmed successfully. You can now log in." });
 });
 
-const getProfile = asyncHandler(async (req, res) => {
+const getName = asyncHandler(async (req, res) => {
   // Fetching only the name field of the user by ID
   const user = await User.findById(req.user._id).select("name");
 
@@ -332,5 +371,105 @@ const getProfile = asyncHandler(async (req, res) => {
   res.status(200).json({ status: 200, data: { name: user.name } });
 });
 
+const getProfile = asyncHandler(async (req, res) => {
+  // Fetching the user by ID, excluding the password and refresh token
+  const user = await User.findById(req.user._id).select("-password -refreshToken -pin");
 
-export { registerUser, loginUser, logoutUser, verifyOTP, sendOTP, getProfile };
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+  // Return the user's profile in the response
+  res.status(200).json({ status: 200, data: {name: user.name, email: user.email, phoneNumber: user.phoneNumber, username: user.username, dob: user.dob} });
+});
+
+const changeCurrentPasswordAndPin = asyncHandler(async(req,res)=>{
+  const { oldPassword, newPassword, oldPin, newPin } = req.body;
+
+  // Fetch user from the database
+  const user = await User.findById(req.user?._id);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Update password if provided
+  if (oldPassword || newPassword) {
+    if (!oldPassword || !newPassword) {
+      throw new ApiError(400, "Both oldPassword and newPassword are required to update the password");
+    }
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+    if (!isPasswordCorrect) {
+      throw new ApiError(401, "Invalid old password");
+    }
+
+    user.password = newPassword;
+  }
+
+  // Update PIN if provided
+  if (oldPin || newPin) {
+    if (!oldPin || !newPin) {
+      throw new ApiError(400, "Both oldPin and newPin are required to update the PIN");
+    }
+
+    const isPinCorrect = await user.isPinCorrect(oldPin); // Ensure you have a method like this in your model
+    if (!isPinCorrect) {
+      throw new ApiError(401, "Invalid old PIN");
+    }
+
+    user.pin = newPin;
+  }
+
+  // Save user with updated fields
+  await user.save({ validateBeforeSave: true });
+
+  return res.status(200).json(
+    new ApiResponse(200, {}, "Password and/or PIN changed successfully")
+  );
+
+})
+
+const updateUser = asyncHandler(async (req, res) => {
+  const { name, username, email, phoneNumber, dob } = req.body;
+
+  // Create a dynamic update object
+  const updateFields = {};
+  if (name) updateFields.name = name;
+  if (username) updateFields.username = username;
+  if (email) updateFields.email = email;
+  if (phoneNumber) updateFields.phoneNumber = phoneNumber;
+  if (dob) updateFields.dob = dob;
+
+  try {
+    // Check if any fields are provided for update
+    if (Object.keys(updateFields).length === 0) {
+      throw new ApiError(400, "No fields provided for update");
+    }
+
+    // Update user
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      {
+        $set: updateFields,
+      },
+      {
+        new: true, // Return the updated document
+        runValidators: true, // Ensure validators are run
+      }
+    ).select("-password");
+
+    // Handle case when user is not found
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    // Respond with success
+    return res.status(200).json(
+      new ApiResponse(200, user, "User details updated successfully")
+    );
+  } catch (error) {
+    // Handle unexpected errors
+    throw new ApiError(500, error.message || "Internal Server Error");
+  }
+});
+
+export { registerUser, loginUser, logoutUser, verifyOTP, sendOTP, getName, updateUser, getProfile, changeCurrentPasswordAndPin, refreshAccessToken };
